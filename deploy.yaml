@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vnode-approver
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: system:vnode-approver
+rules:
+  - apiGroups:
+      - "certificates.k8s.io"
+    resources:
+      - certificatesigningrequests/approval
+    verbs:
+      - update
+  - apiGroups:
+      - "certificates.k8s.io"
+    resources:
+      - signers
+    verbs:
+      - approve
+  - apiGroups:
+      - "certificates.k8s.io"
+    resources:
+      - certificatesigningrequests
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - "authorization.k8s.io"
+    resources:
+      - subjectaccessreviews
+    verbs:
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: system:vnode-approver
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:vnode-approver
+subjects:
+  - kind: ServiceAccount
+    name: vnode-approver
+    namespace: kube-system
+---
+apiVersion: v1
+data:
+  kubeconfig.conf: |-
+    apiVersion: v1
+    kind: Config
+    clusters:
+    - cluster:
+        certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        # k8s apiserver 地址
+        server: https://kubernetes.default.svc:443
+      name: default
+    contexts:
+    - context:
+        cluster: default
+        namespace: default
+        user: default
+      name: default
+    current-context: default
+    users:
+    - name: default
+      user:
+        tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+kind: ConfigMap
+metadata:
+  labels:
+    app: vnode-approver
+  name: vnode-approver
+  namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vnode-approver-deployment
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: vnode-approver
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: vnode-approver
+    spec:
+      serviceAccountName: vnode-approver
+      volumes:
+        - configMap:
+            defaultMode: 420
+            name: vnode-approver
+          name: vnode-approver
+      containers:
+        - imagePullPolicy: Always
+          name: approver
+          # 仓库地址
+          image: vnode-approver
+          command:
+            - vnode-approver
+            - -v=2
+          volumeMounts:
+            - mountPath: /etc/vnode
+              name: vnode-approver
+          resources:
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
