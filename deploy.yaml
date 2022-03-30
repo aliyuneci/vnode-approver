@@ -102,7 +102,7 @@ spec:
         - imagePullPolicy: Always
           name: approver
           # 仓库地址
-          image: vnode-approver
+          image: registry.cn-hangzhou.aliyuncs.com/eci/vnode-approver:v0.0.1
           command:
             - vnode-approver
             - -v=2
